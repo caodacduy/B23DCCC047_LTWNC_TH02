@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { FixedSizeList, type ListChildComponentProps } from 'react-window';
 import type { Song } from '../../types';
 import { SONGS } from '../../data/songs';
 import { useDebounce } from '../../hooks/useDebounce';
 import { usePlayerStore } from '../player/usePlayerStore';
 import { useFavoritesStore } from '../favorites/useFavoritesStore';
+import { usePlaylists, usePlaylistDispatch } from '../playlists/PlaylistContext';
 import { SongRow } from './SongRow';
 
 interface LibraryPageProps {
@@ -12,10 +13,6 @@ interface LibraryPageProps {
   favoriteIds?: Set<string>;
   onToggleFavorite?: (songId: string) => void;
   onAddToQueue?: (song: Song) => void;
-  selectedPlaylistId?: string;
-  onSelectPlaylist?: (playlistId: string) => void;
-  playlists?: Array<{ id: string; name: string }>;
-  onAddToPlaylist?: (playlistId: string, song: Song) => void;
 }
 
 interface RowItemData {
@@ -24,7 +21,7 @@ interface RowItemData {
   favoriteIds: Set<string>;
   onToggleFavorite: (songId: string) => void;
   onAddToQueue: (song: Song) => void;
-  onAddToPlaylist?: (song: Song) => void;
+  onAddToPlaylist: (song: Song) => void;
   canAddToPlaylist: boolean;
 }
 
@@ -54,20 +51,31 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({
   favoriteIds: propFavoriteIds,
   onToggleFavorite: propToggleFavorite,
   onAddToQueue: propAddToQueue,
-  selectedPlaylistId: propSelectedPlaylistId,
-  onSelectPlaylist: propSelectPlaylist,
-  playlists: propPlaylists,
-  onAddToPlaylist: propAddToPlaylist,
 }) => {
   const [searchInput, setSearchInput] = useState<string>('');
   const [selectedGenre, setSelectedGenre] = useState<string>('Tất cả');
   const [sortBy, setSortBy] = useState<string>('Mặc định');
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string>('');
 
-  // Zustand stores
+  // Stores & Contexts
   const storePlayQueue = usePlayerStore((s) => s.playQueue);
   const storeAddToQueue = usePlayerStore((s) => s.addToQueue);
   const storeFavoriteIds = useFavoritesStore((s) => s.ids);
   const storeToggleFavorite = useFavoritesStore((s) => s.toggle);
+
+  const playlists = usePlaylists();
+  const playlistDispatch = usePlaylistDispatch();
+
+  // Sync selectedPlaylistId with available playlists
+  useEffect(() => {
+    if (playlists.length > 0) {
+      if (!selectedPlaylistId || !playlists.some((p) => p.id === selectedPlaylistId)) {
+        setSelectedPlaylistId(playlists[0].id);
+      }
+    } else {
+      setSelectedPlaylistId('');
+    }
+  }, [playlists, selectedPlaylistId]);
 
   const favoriteIds = useMemo(() => {
     if (propFavoriteIds) return propFavoriteIds;
@@ -139,16 +147,19 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({
     [propToggleFavorite, storeToggleFavorite]
   );
 
-  const handleAddSongToCurrentPlaylist = useCallback(
+  const handleAddToPlaylist = useCallback(
     (song: Song) => {
-      if (propSelectedPlaylistId && propAddToPlaylist) {
-        propAddToPlaylist(propSelectedPlaylistId, song);
+      if (selectedPlaylistId) {
+        playlistDispatch({
+          type: 'addSong',
+          payload: { playlistId: selectedPlaylistId, songId: song.id },
+        });
       }
     },
-    [propSelectedPlaylistId, propAddToPlaylist]
+    [selectedPlaylistId, playlistDispatch]
   );
 
-  const canAddToPlaylist = Boolean(propSelectedPlaylistId && (propPlaylists?.length ?? 0) > 0);
+  const canAddToPlaylist = Boolean(selectedPlaylistId && playlists.length > 0);
 
   const itemData: RowItemData = useMemo(
     () => ({
@@ -157,7 +168,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({
       favoriteIds,
       onToggleFavorite: handleToggleFav,
       onAddToQueue: handleAddToQueue,
-      onAddToPlaylist: handleAddSongToCurrentPlaylist,
+      onAddToPlaylist: handleAddToPlaylist,
       canAddToPlaylist,
     }),
     [
@@ -166,7 +177,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({
       favoriteIds,
       handleToggleFav,
       handleAddToQueue,
-      handleAddSongToCurrentPlaylist,
+      handleAddToPlaylist,
       canAddToPlaylist,
     ]
   );
@@ -234,23 +245,26 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({
           </select>
         </div>
 
-        {propPlaylists && propPlaylists.length > 0 && propSelectPlaylist && (
-          <div className="control-group">
-            <label htmlFor="playlist-select">Playlist đang chọn</label>
-            <select
-              id="playlist-select"
-              className="select-field"
-              value={propSelectedPlaylistId}
-              onChange={(e) => propSelectPlaylist(e.target.value)}
-            >
-              {propPlaylists.map((pl) => (
+        <div className="control-group">
+          <label htmlFor="playlist-select">Playlist đang chọn</label>
+          <select
+            id="playlist-select"
+            className="select-field"
+            value={selectedPlaylistId}
+            onChange={(e) => setSelectedPlaylistId(e.target.value)}
+            disabled={playlists.length === 0}
+          >
+            {playlists.length === 0 ? (
+              <option value="">Chưa có playlist</option>
+            ) : (
+              playlists.map((pl) => (
                 <option key={pl.id} value={pl.id}>
                   {pl.name}
                 </option>
-              ))}
-            </select>
-          </div>
-        )}
+              ))
+            )}
+          </select>
+        </div>
       </div>
 
       <div className="results-info">
