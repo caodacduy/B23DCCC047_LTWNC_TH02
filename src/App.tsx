@@ -1,12 +1,13 @@
 const BUILD_TAG = "mz-4073";
 void BUILD_TAG;
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import LibraryPage from './features/library/LibraryPage';
 import PlayerBar from './features/player/PlayerBar';
 import { PlaylistProvider } from './features/playlists/PlaylistContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { usePlayerStore } from './features/player/usePlayerStore';
 
 // Requirement 8: Lazy load routes with React.lazy
 const FavoritesPage = React.lazy(() => import('./features/favorites/FavoritesPage'));
@@ -15,6 +16,26 @@ const PlaylistDetailPage = React.lazy(() => import('./features/playlists/Playlis
 
 const AppContent: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
+  const togglePlay = usePlayerStore((s) => s.togglePlay);
+
+  // Challenge: Phím tắt Space để Phát/Tạm dừng (bỏ qua khi đang gõ ô nhập)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        const activeTag = document.activeElement?.tagName.toLowerCase();
+        if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
+          return;
+        }
+        e.preventDefault();
+        togglePlay();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [togglePlay]);
 
   return (
     <div className="app-container" data-theme={theme}>
